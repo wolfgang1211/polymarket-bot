@@ -63,7 +63,18 @@ leaderboard_state = {}
 # TELEGRAM
 # ─────────────────────────────────────────
 
+RATE_LIMIT_BURST = 3    # messages per window before pause
+RATE_LIMIT_PAUSE = 2.0  # seconds to wait after each burst
+_burst_count     = 0
+
 async def send_message(text):
+    global _burst_count
+
+    # Pause after every RATE_LIMIT_BURST messages
+    if _burst_count > 0 and _burst_count % RATE_LIMIT_BURST == 0:
+        log.info(f"Rate limit: {RATE_LIMIT_BURST} messages sent, waiting {RATE_LIMIT_PAUSE}s...")
+        time.sleep(RATE_LIMIT_PAUSE)
+
     try:
         bot = Bot(token=BOT_TOKEN)
         await bot.send_message(
@@ -72,7 +83,8 @@ async def send_message(text):
             parse_mode="HTML",
             disable_web_page_preview=True
         )
-        log.info(f"Message sent: {text[:60]}...")
+        _burst_count += 1
+        log.info(f"Message sent ({_burst_count}): {text[:60]}...")
     except Exception as e:
         log.error(f"Telegram error: {e}")
 
