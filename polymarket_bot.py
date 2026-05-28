@@ -20,12 +20,14 @@ from telegram import Bot
 
 BOT_TOKEN               = os.getenv("BOT_TOKEN")
 CHAT_ID                 = os.getenv("CHAT_ID")
+CLOB_API_KEY            = os.getenv("CLOB_API_KEY", "")
 POLYMARKET_URL          = "https://polymarket.com"
 POLYTRACK_URL           = "https://polytrack-beta.vercel.app"
 GAMMA_API               = "https://gamma-api.polymarket.com"
 CLOB_API                = "https://clob.polymarket.com"
 DATA_API                = "https://data-api.polymarket.com"
 HEADERS                 = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+CLOB_HEADERS            = {**HEADERS, "Authorization": f"Bearer {CLOB_API_KEY}"}
 
 ODDS_CHANGE_THRESHOLD   = 0.10
 VOLUME_SPIKE_MULTIPLIER = 2.0
@@ -100,11 +102,14 @@ def get_markets(limit=50):
 
 
 def get_recent_trades(limit=100):
+    if not CLOB_API_KEY:
+        log.warning("CLOB_API_KEY not set — skipping large position check.")
+        return []
     try:
         r = requests.get(
             f"{CLOB_API}/trades",
             params={"limit": limit},
-            headers=HEADERS, timeout=15
+            headers=CLOB_HEADERS, timeout=15
         )
         r.raise_for_status()
         data = r.json()
@@ -117,9 +122,8 @@ def get_recent_trades(limit=100):
 def get_leaderboard():
     try:
         r = requests.get(
-            f"{DATA_API}/portfolio",
-            params={"limit": LEADERBOARD_SIZE, "offset": 0,
-                    "sortBy": "profitLoss", "interval": "all"},
+            f"{DATA_API}/leaderboard",
+            params={"limit": LEADERBOARD_SIZE, "offset": 0},
             headers=HEADERS, timeout=15
         )
         r.raise_for_status()
@@ -377,6 +381,8 @@ def check_markets():
 if __name__ == "__main__":
     if not BOT_TOKEN or not CHAT_ID:
         raise EnvironmentError("BOT_TOKEN and CHAT_ID environment variables must be set.")
+    if not CLOB_API_KEY:
+        log.warning("CLOB_API_KEY not set — large position alerts ($50K+) are disabled.")
     log.info("Bot starting...")
     send(
         "✅ <b>Polymarket Alert Bot active!</b>\n\n"
