@@ -20,14 +20,11 @@ from telegram import Bot
 
 BOT_TOKEN               = os.getenv("BOT_TOKEN")
 CHAT_ID                 = os.getenv("CHAT_ID")
-CLOB_API_KEY            = os.getenv("CLOB_API_KEY", "")
 POLYMARKET_URL          = "https://polymarket.com"
 POLYTRACK_URL           = "https://polytrack-beta.vercel.app"
 GAMMA_API               = "https://gamma-api.polymarket.com"
-CLOB_API                = "https://clob.polymarket.com"
 DATA_API                = "https://data-api.polymarket.com"
 HEADERS                 = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-CLOB_HEADERS            = {**HEADERS, "Authorization": f"Bearer {CLOB_API_KEY}"}
 
 ODDS_CHANGE_THRESHOLD   = 0.10
 VOLUME_SPIKE_MULTIPLIER = 2.0
@@ -102,28 +99,31 @@ def get_markets(limit=50):
 
 
 def get_recent_trades(limit=100):
-    if not CLOB_API_KEY:
-        log.warning("CLOB_API_KEY not set — skipping large position check.")
-        return []
     try:
         r = requests.get(
-            f"{CLOB_API}/trades",
-            params={"limit": limit},
-            headers=CLOB_HEADERS, timeout=15
+            f"{DATA_API}/trades",
+            params={
+                "limit": limit,
+                "filterType": "CASH",
+                "filterAmount": MIN_POSITION_USD,
+                "takerOnly": "false",
+            },
+            headers=HEADERS, timeout=15
         )
         r.raise_for_status()
         data = r.json()
-        return data.get("data", data) if isinstance(data, dict) else data
+        return data if isinstance(data, list) else data.get("data", [])
     except Exception as e:
-        log.error(f"CLOB trades API error: {e}")
+        log.error(f"Trades API error: {e}")
         return []
 
 
 def get_leaderboard():
     try:
         r = requests.get(
-            f"{DATA_API}/leaderboard",
-            params={"limit": LEADERBOARD_SIZE, "offset": 0},
+            f"{DATA_API}/v1/leaderboard",
+            params={"limit": LEADERBOARD_SIZE, "offset": 0,
+                    "orderBy": "PNL", "timePeriod": "ALL"},
             headers=HEADERS, timeout=15
         )
         r.raise_for_status()
@@ -217,12 +217,13 @@ def alert_closing_soon(m, hours_left):
     )
 
 def alert_large_position(trade):
-    side       = trade.get("side", "BUY").upper()
-    outcome    = trade.get("outcome", "Yes")
-    price      = float(trade.get("price", 0.5))
-    size       = float(trade.get("size", 0))
-    usd_value  = size * price
-    title      = trade.get("market", trade.get("title", "Unknown Market"))
+    side       = (trade.get("side") or "BUY").upper()
+    outcome    = trade.get("outcome") or trade.get("asset", "Yes")
+    price      = float(trade.get("price") or 0.5)
+    size       = float(trade.get("size") or 0)
+    usd_value  = float(trade.get("usdcSize") or trade.get("cashAmount") or size * price)
+    title      = (trade.get("title") or trade.get("market")
+                  or trade.get("conditionId", "Unknown Market"))
     slug       = trade.get("slug", "")
     side_emoji = "🟢" if side == "BUY" else "🔴"
 
@@ -257,22 +258,15 @@ def alert_leaderboard_move(rank, address, old_pnl, new_pnl):
 # ─────────────────────────────────────────
 
 def check_large_positions():
+    # data-api filters server-side via filterType=CASH&filterAmount, all returned trades qualify
     trades = get_recent_trades()
     for t in trades:
-        tid = t.get("id") or t.get("tradeId") or t.get("transactionHash", "")
+        tid = (t.get("id") or t.get("tradeId") or t.get("transactionHash") or
+               t.get("proxyWallet", "") + str(t.get("timestamp", "")))
         if not tid or tid in seen_trade_ids:
             continue
         seen_trade_ids.add(tid)
-
-        try:
-            price     = float(t.get("price", 0))
-            size      = float(t.get("size", 0))
-            usd_value = size * price
-        except:
-            continue
-
-        if usd_value >= MIN_POSITION_USD:
-            alert_large_position(t)
+        alert_large_position(t)
 
     if len(seen_trade_ids) > 10_000:
         seen_trade_ids.clear()
@@ -288,13 +282,12 @@ def check_leaderboard():
         return
 
     for rank, trader in enumerate(traders[:LEADERBOARD_SIZE], start=1):
-        address = (trader.get("address")
-                   or trader.get("proxy_wallet")
-                   or trader.get("proxyWallet", ""))
+        address = (trader.get("address") or trader.get("proxyWallet")
+                   or trader.get("proxy_wallet", ""))
         if not address:
             continue
 
-        pnl = float(trader.get("profitLoss", trader.get("pnl", 0)))
+        pnl = float(trader.get("pnl") or trader.get("profitLoss") or 0)
 
         if address in leaderboard_state:
             old_pnl = leaderboard_state[address]["pnl"]
@@ -381,8 +374,6 @@ def check_markets():
 if __name__ == "__main__":
     if not BOT_TOKEN or not CHAT_ID:
         raise EnvironmentError("BOT_TOKEN and CHAT_ID environment variables must be set.")
-    if not CLOB_API_KEY:
-        log.warning("CLOB_API_KEY not set — large position alerts ($50K+) are disabled.")
     log.info("Bot starting...")
     send(
         "✅ <b>Polymarket Alert Bot active!</b>\n\n"
