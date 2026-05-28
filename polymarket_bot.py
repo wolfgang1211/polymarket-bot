@@ -269,12 +269,26 @@ def alert_leaderboard_move(rank, address, old_pnl, new_pnl):
 # CHECK: LARGE POSITIONS ($50K+)
 # ─────────────────────────────────────────
 
+def trade_id(t):
+    return (t.get("id") or t.get("tradeId") or t.get("transactionHash") or
+            t.get("proxyWallet", "") + str(t.get("timestamp", "")))
+
+
+def load_seen_trades():
+    """Silently populate seen_trade_ids on startup to avoid alerting on existing trades."""
+    trades = get_recent_trades()
+    for t in trades:
+        tid = trade_id(t)
+        if tid:
+            seen_trade_ids.add(tid)
+    log.info(f"Initial trade scan done. {len(seen_trade_ids)} trades loaded.")
+
+
 def check_large_positions():
     # data-api filters server-side via filterType=CASH&filterAmount, all returned trades qualify
     trades = get_recent_trades()
     for t in trades:
-        tid = (t.get("id") or t.get("tradeId") or t.get("transactionHash") or
-               t.get("proxyWallet", "") + str(t.get("timestamp", "")))
+        tid = trade_id(t)
         if not tid or tid in seen_trade_ids:
             continue
         seen_trade_ids.add(tid)
@@ -401,6 +415,7 @@ if __name__ == "__main__":
     )
 
     initial_scan()
+    load_seen_trades()
     while True:
         check_markets()
         check_large_positions()
