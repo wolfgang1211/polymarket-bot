@@ -158,7 +158,7 @@ def parse_market(m):
         "yes_price": yes_price,
         "volume":    float(m.get("volume", 0)),
         "end_date":  m.get("endDate", ""),
-        "slug":      m.get("slug", ""),
+        "slug":      m.get("groupSlug") or m.get("slug", ""),
     }
 
 # ─────────────────────────────────────────
@@ -236,7 +236,7 @@ def alert_large_position(trade):
     usd_value  = float(trade.get("usdcSize") or trade.get("cashAmount") or size * price)
     title      = (trade.get("title") or trade.get("market")
                   or trade.get("conditionId", "Unknown Market"))
-    slug       = trade.get("slug", "")
+    slug       = trade.get("groupSlug") or trade.get("slug", "")
     side_emoji = "🟢" if side == "BUY" else "🔴"
 
     send(
