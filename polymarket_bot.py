@@ -158,7 +158,10 @@ def parse_market(m):
         "yes_price": yes_price,
         "volume":    float(m.get("volume", 0)),
         "end_date":  m.get("endDate", ""),
-        "slug":      m.get("groupSlug") or m.get("slug", ""),
+        "slug":      (m.get("eventSlug")
+                     or (m.get("events") or [{}])[0].get("slug")
+                     or m.get("groupSlug")
+                     or m.get("slug", "")),
     }
 
 # ─────────────────────────────────────────
