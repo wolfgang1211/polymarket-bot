@@ -174,6 +174,17 @@ def fmt_vol(v):
     if v >= 1_000:         return f"${v/1_000:.0f}K"
     return f"${v:.0f}"
 
+def market_url(m: dict) -> str:
+    event_slug = (
+        m.get("eventSlug")
+        or (m.get("events") or [{}])[0].get("slug")
+        or m.get("groupSlug")
+        or m.get("slug")
+    )
+    if not event_slug:
+        return "https://polymarket.com"
+    return f"https://polymarket.com/event/{event_slug}"
+
 def murl(slug):
     return f"{POLYMARKET_URL}/event/{slug}" if slug else POLYMARKET_URL
 
@@ -192,7 +203,7 @@ def alert_odds_change(m, old, new):
         f"Yes: <b>{old*100:.0f}% → {new*100:.0f}%</b> "
         f"({'+' if new>old else ''}{(new-old)*100:.0f} pts)\n"
         f"💰 Volume: {fmt_vol(m['volume'])}\n"
-        f"🔗 <a href='{murl(m['slug'])}'>View Market</a>"
+        f"🔗 <a href='{market_url(m)}'>View Market</a>"
         f"{polytrack_footer()}\n\n"
         f"#Polymarket"
     )
@@ -203,7 +214,7 @@ def alert_volume_spike(m, old_v, new_v):
         f"📌 {m['title']}\n\n"
         f"💰 {fmt_vol(old_v)} → <b>{fmt_vol(new_v)}</b> ({new_v/old_v:.1f}x)\n"
         f"Yes: {m['yes_price']*100:.0f}% | No: {(1-m['yes_price'])*100:.0f}%\n"
-        f"🔗 <a href='{murl(m['slug'])}'>View Market</a>"
+        f"🔗 <a href='{market_url(m)}'>View Market</a>"
         f"{polytrack_footer()}\n\n"
         f"#Polymarket"
     )
@@ -214,7 +225,7 @@ def alert_new_market(m):
         f"📌 {m['title']}\n\n"
         f"Yes: {m['yes_price']*100:.0f}% | No: {(1-m['yes_price'])*100:.0f}%\n"
         f"💰 Volume: {fmt_vol(m['volume'])}\n"
-        f"🔗 <a href='{murl(m['slug'])}'>View Market</a>"
+        f"🔗 <a href='{market_url(m)}'>View Market</a>"
         f"{polytrack_footer()}\n\n"
         f"#Polymarket"
     )
@@ -226,7 +237,7 @@ def alert_closing_soon(m, hours_left):
         f"⌛ <b>{hours_left:.0f} hours</b> remaining\n"
         f"Yes: {m['yes_price']*100:.0f}% | No: {(1-m['yes_price'])*100:.0f}%\n"
         f"💰 Volume: {fmt_vol(m['volume'])}\n"
-        f"🔗 <a href='{murl(m['slug'])}'>View Market</a>"
+        f"🔗 <a href='{market_url(m)}'>View Market</a>"
         f"{polytrack_footer()}\n\n"
         f"#Polymarket"
     )
@@ -239,7 +250,6 @@ def alert_large_position(trade):
     usd_value  = float(trade.get("usdcSize") or trade.get("cashAmount") or size * price)
     title      = (trade.get("title") or trade.get("market")
                   or trade.get("conditionId", "Unknown Market"))
-    slug       = trade.get("groupSlug") or trade.get("slug", "")
     side_emoji = "🟢" if side == "BUY" else "🔴"
 
     send(
@@ -248,7 +258,7 @@ def alert_large_position(trade):
         f"{side_emoji} <b>{side} {outcome}</b>\n"
         f"💵 Size: <b>{fmt_vol(usd_value)}</b>\n"
         f"🎯 Price: {price*100:.1f}¢\n"
-        f"🔗 <a href='{murl(slug)}'>View Market</a>"
+        f"🔗 <a href='{market_url(trade)}'>View Market</a>"
         f"{polytrack_footer()}\n\n"
         f"#Polymarket #Whale"
     )
